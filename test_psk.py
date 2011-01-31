@@ -94,10 +94,10 @@ ungray_to_binary = {
     }
 
 def main():
-  constell = make_gray_constellation(2)
+  constell = make_gray_constellation(4)
   print 'gray_constellation: '
   print constell
-  make_con = make_constellation(2)
+  make_con = make_constellation(4)
   print 'make_constellation: '
   print make_con
   
