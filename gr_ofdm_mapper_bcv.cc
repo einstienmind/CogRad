@@ -119,14 +119,17 @@ gr_ofdm_mapper_bcv::gr_ofdm_mapper_bcv (const std::vector<gr_complex> &constella
 /////////////////////////////////////////////////////////////////////////////////////
 //New code starts here
 /////////////////////////////////////////////////////////////////////////////////////
+
+
 gr_ofdm_mapper_bcv::set_new_carriermap(std::string carrier_map,unsigned int occupied_carriers)
 {
   
-  diff = (d_fft_length/4 - carriers.length())/2; 
+  diff = (d_fft_length/4 - carrier_map.length())/2; 
+  d_subcarrier_map.clear();
 
   unsigned int i,j,k;
-  for(i = 0; i < carriers.length(); i++) {
-    char c = carriers[i];                            // get the current hex character from the string
+  for(i = 0; i < carrier_map.length(); i++) {
+    char c = carrier_map[i];                            // get the current hex character from the string
     for(j = 0; j < 4; j++) {                         // walk through all four bits
       k = (strtol(&c, NULL, 16) >> (3-j)) & 0x1;     // convert to int and extract next bit
       if(k) {                                        // if bit is a 1, 
