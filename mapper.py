@@ -6,7 +6,10 @@ import gnuradio.gr.gr_threading as _threading
 from gnuradio.eng_option import eng_option
 from optparse import OptionParser
 from array import array
+from gnuradio.blks2impl import psk, qam
 
+
+import time, struct, sys
 
 class ofdm_mod(gr.top_block):
         def __init__(self):
@@ -19,15 +22,18 @@ class ofdm_mod(gr.top_block):
 		parser.add_option("","--discontinuous", action="store_true", default=False,
 			  help="enable discontinuous mode")
 		(options, args) = parser.parse_args ()
+		msgq_limit=2
 		
                 gr.top_block.__init__(self)
                 padded_preambles = list()
                 
                 # Set of pre-defined parameters. In actual code this is passed as parameter in options
-                known_symb = [-1, -1, 1, -1, 1, 1, -1, -1, 1, -1, 1, 1, -1, 1, -1, -1]
-                fft_length = 16
-                occupied_tones = 4
-                cp_length = 2
+                #known_symb = [-1, -1, 1, -1, 1, 1, -1, -1, 1, -1, 1, 1, -1, 1, -1, -1]
+                known_symb = 1000 *[1,-1]
+                fft_length = 512
+                occupied_tones = 200
+                cp_length = 128
+                pad_for_usrp = True
                 modulation = "qpsk"
                 
                 zeros_on_left= int(math.ceil((fft_length - occupied_tones)/2.0))
@@ -57,8 +63,8 @@ class ofdm_mod(gr.top_block):
 		#print rotated_const
 		
 		self._pkt_input = gr.ofdm_mapper_bcv(rotated_const, msgq_limit,
-						    options.occupied_tones, options.fft_length)
-                self.preambles_2 = gr.ofdm_insert_preamble(fft_length, padded_preambles)
+						    occupied_tones,fft_length)
+                self.preambles_2 = gr.ofdm_insert_preamble(fft_length,padded_preambles)
                 
                 #Setting up the user defined data to test the working of the blocks
                 data1 = 512*[complex(2,3)] #How to generate complex modulated values
@@ -67,14 +73,16 @@ class ofdm_mod(gr.top_block):
 		data2 = array('B',[1])
 		data2.extend(twos_arr)
                 #print data
+                
+                
 		self.data_src1 = gr.vector_source_c(data1,True,16)
 		self.data_src2 = gr.vector_source_b(data2,True,1)
-		self.sink_n  = gr.vector_sink_c(16)
+		self.sink_n  = gr.vector_sink_c(512)
 		
 		# End of data setting
 		
-		self.sink_file = gr.file_sink(16*gr.sizeof_gr_complex,'pad')
-		v2s = gr.vector_to_stream(128,1)
+		self.sink_file = gr.file_sink(512*gr.sizeof_gr_complex,'pad')
+		v2s = gr.vector_to_stream(4096,1)
 		
                 self.connect((self._pkt_input,0),(self.preambles_2,0))
 		self.connect((self._pkt_input,1),(self.preambles_2,1))
@@ -85,42 +93,39 @@ class ofdm_mod(gr.top_block):
 		print self.result_data
 	
 	def send_pkt(self, payload='', eof=False):
-        """
-        Send the payload.
-
-        @param payload: data to send
-        @type payload: string
-        """
-        if eof:
-            msg = gr.message(1) # tell self._pkt_input we're not sending any more packets
-        else:
-            # print "original_payload =", string_to_hex_list(payload)
-            pkt = ofdm_packet_utils.make_packet(payload, 1, 1, self._pad_for_usrp, whitening=True)
-            
-            #print "pkt =", string_to_hex_list(pkt)
-            msg = gr.message_from_string(pkt)
-        self._pkt_input.msgq().insert_tail(msg)
+		pad_for_usrp = True
+		if eof:
+		    msg = gr.message(1) # tell self._pkt_input we're not sending any more packets
+		else:
+		    # print "original_payload =", string_to_hex_list(payload)
+		    pkt = ofdm_packet_utils.make_packet(payload, 1, 1, pad_for_usrp, whitening=True)
+		    
+		    #print "pkt =", string_to_hex_list(pkt)
+		    msg = gr.message_from_string(pkt)
+		self._pkt_input.msgq().insert_tail(msg)
 		                
 def main():
 	tb = ofdm_mod()
 	
 	tb.start()
-	
+	megabytes = 1
+	size = 400
+	discontinuous = 0
 	# generate and send packets
-	nbytes = int(1e6 * options.megabytes)
+	nbytes = int(1e4 * megabytes)
 	n = 0
 	pktno = 0
-	pkt_size = int(options.size)
+	pkt_size = int(size)
 
 	while n < nbytes:
-	    send_pkt(struct.pack('!H', pktno) + (pkt_size - 2) * chr(pktno & 0xff))
+	    tb.send_pkt(struct.pack('!H', pktno) + (pkt_size - 2) * chr(pktno & 0xff))
 	    n += pkt_size
 	    sys.stderr.write('.')
-	    if options.discontinuous and pktno % 5 == 1:
+	    if discontinuous and pktno % 5 == 1:
 		time.sleep(1)
 	    pktno += 1
 	    
-	send_pkt(eof=True)
+	tb.send_pkt(eof=True)
 	tb.wait()                       # wait for it to finish
 	#tb.print_data()
 	#tb.wait()
